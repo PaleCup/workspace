@@ -1,0 +1,84 @@
+/* 拾味小馆 自定义现代样式 */
+:root {
+  --primary-color: #ea580c; /* 活力暖橙 */
+  --primary-hover: #c2410c;
+  --bg-gradient: linear-gradient(135deg, #fff7ed 0%, #fdf4ff 100%);
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  background-color: #f8fafc;
+  color: #1e293b;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 隐藏滚动条但保留功能 */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* 自定义轻量滚动条 */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* 菜品卡片浮动效果 */
+.dish-card {
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.dish-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 24px -10px rgba(234, 88, 12, 0.15), 0 4px 6px -4px rgba(0, 0, 0, 0.05);
+}
+
+/* 渐变文本 */
+.text-brand-gradient {
+  background: linear-gradient(135deg, #ea580c 0%, #f97316 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* 骨架屏脉冲动画 */
+@keyframes pulse-subtle {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+.pulse-subtle {
+  animation: pulse-subtle 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* 气泡呼吸指示器 */
+.status-dot-pulse {
+  animation: dot-pulse 1.8s infinite;
+}
+@keyframes dot-pulse {
+  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7); }
+  70% { transform: scale(1); box-shadow: 0 0 0 8px rgba(34, 197, 94, 0); }
+  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
+}
+
+/* 弹窗渐入过渡 */
+.modal-fade-enter-active,
+.modal-fade-leave-active {
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+.modal-fade-enter-from,
+.modal-fade-leave-to {
+  opacity: 0;
+  transform: scale(0.97);
+}

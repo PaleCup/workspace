@@ -1,0 +1,1380 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>拾味小馆 · 智慧餐饮与商家评价系统</title>
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#fff7ed',
+              100: '#ffedd5',
+              200: '#fed7aa',
+              300: '#fdba74',
+              400: '#fb923c',
+              500: '#f97316',
+              600: '#ea580c',
+              700: '#c2410c',
+              800: '#9a3412',
+              900: '#7c2d12',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  
+  <!-- Vue 3 CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/vue@3.4.21/dist/vue.global.prod.js"></script>
+  
+  <!-- SweetAlert2 CDN for polished toast/alerts -->
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  
+  <!-- FontAwesome Icons for crisp UI symbols -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  
+  <!-- Custom CSS -->
+  <link rel="stylesheet" href="/static/css/custom.css">
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
+  <div id="app" v-cloak class="flex flex-col min-h-screen">
+    
+    <!-- 顶部全景导航栏 -->
+    <header class="sticky top-0 z-40 bg-white/95 backdrop-blur border-b border-slate-200 shadow-xs">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
+        
+        <!-- 左侧：品牌与营业状态 -->
+        <div class="flex items-center space-x-4 cursor-pointer" @click="currentMode = 'customer'; customerTab = 'ordering'">
+          <img :src="merchant.logo_url" alt="Logo" class="w-12 h-12 rounded-xl object-cover shadow-sm ring-2 ring-brand-500/20">
+          <div>
+            <div class="flex items-center space-x-2">
+              <h1 class="text-xl font-bold tracking-tight text-slate-900">{{ merchant.name }}</h1>
+              <span v-if="merchant.is_open === 1" class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5 status-dot-pulse"></span>
+                营业中
+              </span>
+              <span v-else class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-rose-100 text-rose-800">
+                <span class="w-1.5 h-1.5 rounded-full bg-rose-500 mr-1.5"></span>
+                休息中
+              </span>
+            </div>
+            <p class="text-xs text-slate-500 mt-0.5 truncate max-w-xs">{{ merchant.slogan }}</p>
+          </div>
+        </div>
+
+        <!-- 中间：顾客模式导航选项卡 -->
+        <nav v-if="currentMode === 'customer'" class="hidden md:flex items-center space-x-1 bg-slate-100 p-1.5 rounded-2xl border border-slate-200/80">
+          <button 
+            @click="customerTab = 'ordering'" 
+            :class="customerTab === 'ordering' ? 'bg-white text-brand-600 shadow-xs font-bold' : 'text-slate-600 hover:text-slate-900 font-medium'"
+            class="px-5 py-2 rounded-xl text-sm transition-all flex items-center space-x-2">
+            <i class="fa-solid fa-utensils"></i>
+            <span>点餐大厅</span>
+          </button>
+          <button 
+            @click="customerTab = 'merchant'" 
+            :class="customerTab === 'merchant' ? 'bg-white text-brand-600 shadow-xs font-bold' : 'text-slate-600 hover:text-slate-900 font-medium'"
+            class="px-5 py-2 rounded-xl text-sm transition-all flex items-center space-x-2">
+            <i class="fa-solid fa-store"></i>
+            <span>商家主页</span>
+          </button>
+          <button 
+            @click="customerTab = 'reviews'" 
+            :class="customerTab === 'reviews' ? 'bg-white text-brand-600 shadow-xs font-bold' : 'text-slate-600 hover:text-slate-900 font-medium'"
+            class="px-5 py-2 rounded-xl text-sm transition-all flex items-center space-x-2">
+            <i class="fa-solid fa-star"></i>
+            <span>顾客评价</span>
+            <span class="bg-amber-100 text-amber-800 text-xs px-1.5 py-0.2 rounded-full font-semibold">{{ merchant.avg_rating }}★</span>
+          </button>
+          <button 
+            @click="customerTab = 'orders'" 
+            :class="customerTab === 'orders' ? 'bg-white text-brand-600 shadow-xs font-bold' : 'text-slate-600 hover:text-slate-900 font-medium'"
+            class="px-5 py-2 rounded-xl text-sm transition-all flex items-center space-x-2">
+            <i class="fa-solid fa-receipt"></i>
+            <span>我的订单</span>
+            <span v-if="ordersList.length > 0" class="bg-brand-500 text-white text-xs px-1.5 py-0.2 rounded-full font-bold">{{ ordersList.length }}</span>
+          </button>
+        </nav>
+
+        <!-- 中间：商家管理端标题 -->
+        <div v-else class="flex items-center space-x-2 text-slate-800 font-bold text-lg">
+          <i class="fa-solid fa-gauge-high text-brand-600"></i>
+          <span>商家数字化运营工作台</span>
+        </div>
+
+        <!-- 右侧：搜索框、购物车浮动按钮、模式切换按钮 -->
+        <div class="flex items-center space-x-3">
+          <!-- 顾客端专属：全局搜索与购物车 -->
+          <template v-if="currentMode === 'customer'">
+            <div class="relative hidden lg:block w-48">
+              <input 
+                v-model="searchQuery" 
+                type="text" 
+                placeholder="搜索菜品/口味..." 
+                class="w-full pl-8 pr-3 py-1.5 text-xs rounded-full border border-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-slate-50">
+              <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-slate-400 text-xs"></i>
+              <button v-if="searchQuery" @click="searchQuery = ''" class="absolute right-2.5 top-2 text-slate-400 hover:text-slate-600 text-xs">
+                <i class="fa-solid fa-circle-xmark"></i>
+              </button>
+            </div>
+
+            <!-- 购物车抽屉快捷按钮 -->
+            <button 
+              @click="isCartOpen = !isCartOpen" 
+              class="relative bg-brand-50 hover:bg-brand-100 text-brand-600 px-3.5 py-2 rounded-xl text-sm font-semibold flex items-center space-x-2 border border-brand-200 transition-all">
+              <i class="fa-solid fa-cart-shopping text-base"></i>
+              <span class="hidden sm:inline">购物车</span>
+              <span v-if="cartTotalQuantity > 0" class="bg-brand-600 text-white text-xs px-2 py-0.5 rounded-full font-bold ml-1">
+                {{ cartTotalQuantity }}
+              </span>
+              <span v-if="cartSubtotal > 0" class="text-xs text-brand-700 font-mono font-bold">
+                ¥{{ cartSubtotal }}
+              </span>
+            </button>
+          </template>
+
+          <!-- 模式切换：顾客端 <-> 商家后台 -->
+          <button 
+            v-if="currentMode === 'customer'"
+            @click="currentMode = 'admin'" 
+            class="bg-slate-900 hover:bg-slate-800 text-white px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center space-x-2 transition-all shadow-xs">
+            <i class="fa-solid fa-user-shield"></i>
+            <span>商家管理后台</span>
+          </button>
+          <button 
+            v-else
+            @click="currentMode = 'customer'" 
+            class="bg-brand-600 hover:bg-brand-700 text-white px-4 py-2 rounded-xl text-xs font-semibold flex items-center space-x-2 transition-all shadow-xs">
+            <i class="fa-solid fa-arrow-left"></i>
+            <span>返回前台点餐</span>
+          </button>
+        </div>
+
+      </div>
+
+      <!-- 移动端二级导航条 -->
+      <div v-if="currentMode === 'customer'" class="md:hidden flex border-t border-slate-200 bg-white px-2 py-1 justify-around text-xs font-medium">
+        <button @click="customerTab = 'ordering'" :class="customerTab === 'ordering' ? 'text-brand-600 font-bold' : 'text-slate-600'" class="py-2 px-3">
+          <i class="fa-solid fa-utensils block text-center mb-1"></i>点餐
+        </button>
+        <button @click="customerTab = 'merchant'" :class="customerTab === 'merchant' ? 'text-brand-600 font-bold' : 'text-slate-600'" class="py-2 px-3">
+          <i class="fa-solid fa-store block text-center mb-1"></i>商家
+        </button>
+        <button @click="customerTab = 'reviews'" :class="customerTab === 'reviews' ? 'text-brand-600 font-bold' : 'text-slate-600'" class="py-2 px-3">
+          <i class="fa-solid fa-star block text-center mb-1"></i>评价 ({{ merchant.avg_rating }})
+        </button>
+        <button @click="customerTab = 'orders'" :class="customerTab === 'orders' ? 'text-brand-600 font-bold' : 'text-slate-600'" class="py-2 px-3">
+          <i class="fa-solid fa-receipt block text-center mb-1"></i>订单
+        </button>
+      </div>
+    </header>
+
+    <!-- 公告轮播栏 (顾客端显示) -->
+    <div v-if="currentMode === 'customer' && merchant.notice" class="bg-amber-50 border-b border-amber-200/80 px-4 py-2 text-xs text-amber-900 flex items-center justify-between">
+      <div class="max-w-7xl mx-auto flex items-center space-x-2 w-full">
+        <i class="fa-solid fa-bullhorn text-brand-500 animate-bounce text-sm"></i>
+        <span class="font-bold shrink-0">商家公告：</span>
+        <span class="truncate">{{ merchant.notice }}</span>
+      </div>
+    </div>
+
+    <!-- ==================== 顾客端主体页面 ==================== -->
+    <main v-if="currentMode === 'customer'" class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      
+      <!-- 1. 点餐大厅 (TAB: ordering) -->
+      <section v-if="customerTab === 'ordering'" class="flex flex-col lg:flex-row gap-6 items-start">
+        
+        <!-- 左侧分类导航 (宽屏粘性停靠) -->
+        <aside class="w-full lg:w-56 bg-white p-3 rounded-2xl border border-slate-200 shadow-xs lg:sticky lg:top-28 shrink-0">
+          <div class="text-xs font-bold text-slate-400 uppercase tracking-wider px-3 py-2">菜品分类</div>
+          <div class="flex lg:flex-col gap-1 overflow-x-auto lg:overflow-visible pb-2 lg:pb-0">
+            <button 
+              @click="selectedCategory = null" 
+              :class="selectedCategory === null ? 'bg-brand-50 text-brand-600 font-bold' : 'text-slate-600 hover:bg-slate-50'"
+              class="w-full text-left px-3.5 py-2.5 rounded-xl text-sm flex items-center justify-between transition-all whitespace-nowrap">
+              <span class="flex items-center space-x-2">
+                <i class="fa-solid fa-layer-group text-slate-400"></i>
+                <span>全部菜品</span>
+              </span>
+              <span class="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full font-mono">{{ dishes.length }}</span>
+            </button>
+            <button 
+              v-for="cat in categories" 
+              :key="cat.id" 
+              @click="selectedCategory = cat.id"
+              :class="selectedCategory === cat.id ? 'bg-brand-50 text-brand-600 font-bold' : 'text-slate-600 hover:bg-slate-50'"
+              class="w-full text-left px-3.5 py-2.5 rounded-xl text-sm flex items-center justify-between transition-all whitespace-nowrap">
+              <span class="flex items-center space-x-2">
+                <span>{{ cat.name }}</span>
+              </span>
+              <span class="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full font-mono">{{ cat.dish_count }}</span>
+            </button>
+          </div>
+        </aside>
+
+        <!-- 中间菜品列表展示卡片网格 -->
+        <div class="flex-1 w-full">
+          <!-- 筛选状态与计数提示 -->
+          <div class="flex items-center justify-between mb-4">
+            <h2 class="text-lg font-bold text-slate-900 flex items-center space-x-2">
+              <span>{{ selectedCategory ? categories.find(c => c.id === selectedCategory)?.name : '精选特色菜单' }}</span>
+              <span class="text-xs font-normal text-slate-500">共 {{ filteredDishes.length }} 道美味</span>
+            </h2>
+            <div v-if="searchQuery" class="text-xs text-brand-600 bg-brand-50 px-3 py-1 rounded-full">
+              搜索关键字: "{{ searchQuery }}"
+            </div>
+          </div>
+
+          <!-- 菜品列表 -->
+          <div v-if="filteredDishes.length > 0" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
+            <div 
+              v-for="dish in filteredDishes" 
+              :key="dish.id" 
+              class="dish-card bg-white rounded-2xl border border-slate-200 overflow-hidden flex flex-col group">
+              
+              <!-- 菜品图片与标签 -->
+              <div class="relative h-48 overflow-hidden bg-slate-100 cursor-pointer" @click="openDishDetail(dish)">
+                <img 
+                  :src="dish.image_url" 
+                  :alt="dish.name" 
+                  class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500">
+                <div class="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent"></div>
+                
+                <!-- 标签展示 -->
+                <div class="absolute top-2.5 left-2.5 flex flex-wrap gap-1">
+                  <span 
+                    v-for="t in dish.tag_list" 
+                    :key="t" 
+                    class="bg-brand-600/90 backdrop-blur-xs text-white text-[10px] font-semibold px-2 py-0.5 rounded-md shadow-xs">
+                    {{ t }}
+                  </span>
+                </div>
+
+                <!-- 评分与月售浮层 -->
+                <div class="absolute bottom-2 left-2.5 right-2.5 flex justify-between items-center text-white text-xs">
+                  <span class="font-medium flex items-center space-x-1">
+                    <i class="fa-solid fa-star text-amber-400 text-xs"></i>
+                    <span>{{ dish.rating }}</span>
+                  </span>
+                  <span class="text-slate-200 text-[11px]">月售 {{ dish.monthly_sales }} 份</span>
+                </div>
+              </div>
+
+              <!-- 菜品信息主体 -->
+              <div class="p-4 flex-1 flex flex-col justify-between">
+                <div>
+                  <h3 class="font-bold text-slate-900 text-base group-hover:text-brand-600 transition-colors cursor-pointer" @click="openDishDetail(dish)">
+                    {{ dish.name }}
+                  </h3>
+                  <p class="text-xs text-slate-500 mt-1 line-clamp-2 leading-relaxed">
+                    {{ dish.description }}
+                  </p>
+                </div>
+
+                <!-- 价格与加购控制 -->
+                <div class="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
+                  <div class="flex items-baseline space-x-1.5">
+                    <span class="text-xs text-brand-600 font-bold">¥</span>
+                    <span class="text-xl font-bold text-brand-600 font-mono">{{ dish.price }}</span>
+                    <span v-if="dish.original_price" class="text-xs text-slate-400 line-through font-mono">¥{{ dish.original_price }}</span>
+                  </div>
+
+                  <!-- 加减步进器 -->
+                  <div class="flex items-center space-x-2">
+                    <template v-if="getDishCartQty(dish.id) > 0">
+                      <button 
+                        @click="decreaseCartItem(cart.find(i => i.dish_id === dish.id))" 
+                        class="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center font-bold text-sm transition-colors">
+                        <i class="fa-solid fa-minus text-xs"></i>
+                      </button>
+                      <span class="text-sm font-bold font-mono text-slate-900 w-5 text-center">
+                        {{ getDishCartQty(dish.id) }}
+                      </span>
+                    </template>
+                    <button 
+                      @click="addToCart(dish)" 
+                      class="w-8 h-8 rounded-lg bg-brand-600 hover:bg-brand-700 text-white flex items-center justify-center shadow-xs transition-transform active:scale-95">
+                      <i class="fa-solid fa-plus text-xs"></i>
+                    </button>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+          </div>
+
+          <!-- 空结果提示 -->
+          <div v-else class="bg-white rounded-2xl border border-slate-200 p-12 text-center">
+            <i class="fa-solid fa-magnifying-glass text-4xl text-slate-300 mb-3 block"></i>
+            <p class="text-slate-500 text-sm">未找到相关菜品，请尝试切换分类或重置搜索词</p>
+            <button @click="searchQuery = ''; selectedCategory = null" class="mt-4 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl">
+              查看全部菜品
+            </button>
+          </div>
+        </div>
+
+        <!-- 右侧快速结算浮动栏 (宽屏常驻显示) -->
+        <aside class="hidden xl:block w-80 bg-white p-5 rounded-2xl border border-slate-200 shadow-xs sticky top-28 shrink-0">
+          <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+            <h3 class="font-bold text-slate-900 text-base flex items-center space-x-2">
+              <i class="fa-solid fa-bag-shopping text-brand-600"></i>
+              <span>点餐台与清单</span>
+            </h3>
+            <button v-if="cart.length > 0" @click="clearCart" class="text-xs text-slate-400 hover:text-rose-500 transition-colors">
+              清空
+            </button>
+          </div>
+
+          <!-- 就餐方式切换 -->
+          <div class="grid grid-cols-2 gap-2 mt-4 bg-slate-100 p-1 rounded-xl">
+            <button 
+              @click="diningType = 'dine_in'" 
+              :class="diningType === 'dine_in' ? 'bg-white text-brand-600 shadow-xs font-bold' : 'text-slate-600 font-medium'"
+              class="py-1.5 rounded-lg text-xs transition-all flex items-center justify-center space-x-1.5">
+              <i class="fa-solid fa-shop"></i>
+              <span>堂食点餐</span>
+            </button>
+            <button 
+              @click="diningType = 'takeaway'" 
+              :class="diningType === 'takeaway' ? 'bg-white text-brand-600 shadow-xs font-bold' : 'text-slate-600 font-medium'"
+              class="py-1.5 rounded-lg text-xs transition-all flex items-center justify-center space-x-1.5">
+              <i class="fa-solid fa-person-walking-luggage"></i>
+              <span>打包外卖</span>
+            </button>
+          </div>
+
+          <!-- 堂食桌号 / 外卖信息 -->
+          <div class="mt-3 space-y-2 text-xs">
+            <div v-if="diningType === 'dine_in'">
+              <label class="block text-slate-500 mb-1">堂食桌号：</label>
+              <input 
+                v-model="tableNumber" 
+                type="text" 
+                placeholder="例如: A08 或 2号包厢" 
+                class="w-full px-3 py-1.5 bg-slate-50 rounded-lg border border-slate-200 text-xs focus:ring-1 focus:ring-brand-500">
+            </div>
+            <div v-else class="space-y-2">
+              <div>
+                <label class="block text-slate-500 mb-1">配送地址：</label>
+                <input 
+                  v-model="deliveryAddress" 
+                  type="text" 
+                  placeholder="请输入您的详细配送地址" 
+                  class="w-full px-3 py-1.5 bg-slate-50 rounded-lg border border-slate-200 text-xs focus:ring-1 focus:ring-brand-500">
+              </div>
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+              <div>
+                <label class="block text-slate-500 mb-1">联系人：</label>
+                <input v-model="customerName" type="text" placeholder="您的称呼" class="w-full px-3 py-1.5 bg-slate-50 rounded-lg border border-slate-200 text-xs">
+              </div>
+              <div>
+                <label class="block text-slate-500 mb-1">联系手机：</label>
+                <input v-model="customerPhone" type="text" placeholder="手机号码" class="w-full px-3 py-1.5 bg-slate-50 rounded-lg border border-slate-200 text-xs">
+              </div>
+            </div>
+          </div>
+
+          <!-- 购物车条目列表 -->
+          <div class="mt-4 max-h-56 overflow-y-auto divide-y divide-slate-100 pr-1">
+            <div v-if="cart.length === 0" class="py-8 text-center text-slate-400 text-xs">
+              <i class="fa-solid fa-basket-shopping text-3xl mb-2 block text-slate-200"></i>
+              暂无已选菜品，请从左侧添加
+            </div>
+            <div v-for="item in cart" :key="item.dish_id" class="py-2.5 flex items-center justify-between">
+              <div class="flex-1 pr-2">
+                <div class="font-bold text-slate-800 text-xs truncate">{{ item.name }}</div>
+                <div class="text-[11px] text-brand-600 font-mono font-bold">¥{{ item.price }}</div>
+              </div>
+              <div class="flex items-center space-x-2">
+                <button @click="decreaseCartItem(item)" class="w-6 h-6 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center text-xs">
+                  <i class="fa-solid fa-minus text-[10px]"></i>
+                </button>
+                <span class="text-xs font-bold font-mono text-slate-900 w-4 text-center">{{ item.quantity }}</span>
+                <button @click="increaseCartItem(item)" class="w-6 h-6 rounded bg-brand-50 hover:bg-brand-100 text-brand-600 flex items-center justify-center text-xs">
+                  <i class="fa-solid fa-plus text-[10px]"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- 备注信息 -->
+          <div class="mt-4 pt-3 border-t border-slate-100">
+            <label class="block text-xs text-slate-500 mb-1.5 font-medium">订单备注：</label>
+            <div class="flex flex-wrap gap-1 mb-2">
+              <button 
+                v-for="tag in quickRemarks" 
+                :key="tag" 
+                @click="addRemarkTag(tag)" 
+                class="text-[10px] bg-slate-100 hover:bg-slate-200 text-slate-600 px-2 py-0.5 rounded-md">
+                + {{ tag }}
+              </button>
+            </div>
+            <input 
+              v-model="orderRemark" 
+              type="text" 
+              placeholder="例如: 少放辣，免葱..." 
+              class="w-full px-3 py-1.5 bg-slate-50 rounded-lg border border-slate-200 text-xs focus:ring-1 focus:ring-brand-500">
+          </div>
+
+          <!-- 金额汇总 -->
+          <div class="mt-4 pt-3 border-t border-slate-100 space-y-1.5 text-xs text-slate-600">
+            <div class="flex justify-between">
+              <span>菜品小计</span>
+              <span class="font-mono font-bold text-slate-800">¥{{ cartSubtotal }}</span>
+            </div>
+            <div v-if="packagingFee > 0" class="flex justify-between">
+              <span>外卖包装费</span>
+              <span class="font-mono text-slate-800">¥{{ packagingFee }}</span>
+            </div>
+            <div class="flex justify-between text-sm font-bold pt-2 border-t border-slate-100 text-slate-900">
+              <span>应付合计</span>
+              <span class="text-brand-600 font-mono text-lg">¥{{ cartGrandTotal }}</span>
+            </div>
+          </div>
+
+          <!-- 提交订单按钮 -->
+          <button 
+            @click="submitOrder" 
+            :disabled="cart.length === 0 || loading"
+            :class="cart.length > 0 && !loading ? 'bg-brand-600 hover:bg-brand-700 text-white cursor-pointer' : 'bg-slate-200 text-slate-400 cursor-not-allowed'"
+            class="w-full mt-4 py-3 rounded-xl font-bold text-sm shadow-xs transition-all flex items-center justify-center space-x-2">
+            <i v-if="loading" class="fa-solid fa-spinner animate-spin"></i>
+            <span v-else>立即提交下单 (¥{{ cartGrandTotal }})</span>
+          </button>
+        </aside>
+
+      </section>
+
+      <!-- 2. 商家主页简介与风采 (TAB: merchant) -->
+      <section v-if="customerTab === 'merchant'" class="space-y-6">
+        
+        <!-- 头部画卷 Banner -->
+        <div class="relative h-72 sm:h-96 rounded-3xl overflow-hidden shadow-sm">
+          <img :src="merchant.banner_url" alt="Banner" class="w-full h-full object-cover">
+          <div class="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-slate-950/30 to-transparent"></div>
+          
+          <!-- 悬浮基本信息 -->
+          <div class="absolute bottom-6 left-6 right-6 text-white flex flex-col sm:flex-row items-start sm:items-end justify-between gap-4">
+            <div>
+              <div class="flex items-center space-x-2">
+                <span class="bg-brand-600 text-white text-xs px-2.5 py-1 rounded-lg font-bold">老字号推荐</span>
+                <span class="bg-black/50 backdrop-blur-xs text-xs px-2.5 py-1 rounded-lg">人均 ¥{{ merchant.avg_price }}</span>
+              </div>
+              <h2 class="text-2xl sm:text-4xl font-extrabold tracking-tight mt-2">{{ merchant.name }}</h2>
+              <p class="text-sm text-slate-200 mt-1 max-w-2xl leading-relaxed">{{ merchant.slogan }}</p>
+            </div>
+            
+            <div class="bg-white/10 backdrop-blur-md p-3 rounded-2xl border border-white/20 text-center shrink-0">
+              <div class="text-2xl font-black text-amber-400 font-mono">{{ merchant.avg_rating }}</div>
+              <div class="text-[11px] text-slate-200 mt-0.5">综合高口碑评级</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 关键核心信息指标卡片网格 -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div class="bg-white p-5 rounded-2xl border border-slate-200 flex items-center space-x-4">
+            <div class="w-12 h-12 rounded-xl bg-orange-50 text-brand-600 flex items-center justify-center text-xl shrink-0">
+              <i class="fa-solid fa-clock"></i>
+            </div>
+            <div>
+              <div class="text-xs text-slate-400 font-medium">营业时间</div>
+              <div class="text-sm font-bold text-slate-900 mt-0.5">{{ merchant.opening_hours }}</div>
+            </div>
+          </div>
+          
+          <div class="bg-white p-5 rounded-2xl border border-slate-200 flex items-center space-x-4">
+            <div class="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-xl shrink-0">
+              <i class="fa-solid fa-phone"></i>
+            </div>
+            <div>
+              <div class="text-xs text-slate-400 font-medium">订餐与咨询热线</div>
+              <div class="text-sm font-bold text-slate-900 mt-0.5">{{ merchant.phone }}</div>
+            </div>
+          </div>
+
+          <div class="bg-white p-5 rounded-2xl border border-slate-200 flex items-center space-x-4">
+            <div class="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-xl shrink-0">
+              <i class="fa-solid fa-location-dot"></i>
+            </div>
+            <div>
+              <div class="text-xs text-slate-400 font-medium">门店地址</div>
+              <div class="text-xs font-bold text-slate-900 mt-0.5 line-clamp-2">{{ merchant.address }}</div>
+            </div>
+          </div>
+
+          <div class="bg-white p-5 rounded-2xl border border-slate-200 flex items-center space-x-4">
+            <div class="w-12 h-12 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center text-xl shrink-0">
+              <i class="fa-solid fa-fire"></i>
+            </div>
+            <div>
+              <div class="text-xs text-slate-400 font-medium">累计月售</div>
+              <div class="text-sm font-bold text-slate-900 mt-0.5 font-mono">{{ merchant.total_sales }}+ 份好味</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 品牌故事与商家特色 -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <!-- 故事内容 -->
+          <div class="lg:col-span-2 bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-xs">
+            <h3 class="text-lg font-bold text-slate-900 flex items-center space-x-2 border-b border-slate-100 pb-4">
+              <i class="fa-solid fa-book-open text-brand-600"></i>
+              <span>品牌初心与故事</span>
+            </h3>
+            <p class="text-sm text-slate-600 leading-relaxed mt-4 whitespace-pre-line indent-6">
+              {{ merchant.story }}
+            </p>
+            
+            <!-- 商家服务承诺标签 -->
+            <div class="mt-6 pt-4 border-t border-slate-100">
+              <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">品质承诺与到店服务</h4>
+              <div class="flex flex-wrap gap-2">
+                <span 
+                  v-for="tag in merchant.tags" 
+                  :key="tag" 
+                  class="bg-slate-50 border border-slate-200 text-slate-700 text-xs px-3 py-1.5 rounded-xl font-medium flex items-center space-x-1.5">
+                  <i class="fa-solid fa-circle-check text-emerald-500"></i>
+                  <span>{{ tag }}</span>
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 环境相册掠影 -->
+          <div class="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs flex flex-col">
+            <h3 class="text-lg font-bold text-slate-900 flex items-center space-x-2 border-b border-slate-100 pb-4">
+              <i class="fa-solid fa-camera-retro text-brand-600"></i>
+              <span>店内环境实拍</span>
+            </h3>
+            <div class="grid grid-cols-2 gap-3 mt-4 flex-1">
+              <div 
+                v-for="(img, idx) in merchant.gallery" 
+                :key="idx" 
+                class="rounded-xl overflow-hidden h-28 bg-slate-100 relative group cursor-pointer">
+                <img :src="img" alt="Gallery" class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300">
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- 3. 顾客评价系统 (TAB: reviews) -->
+      <section v-if="customerTab === 'reviews'" class="space-y-6">
+        
+        <!-- 评价看板仪表盘 -->
+        <div class="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-xs grid grid-cols-1 md:grid-cols-3 gap-6 items-center">
+          
+          <!-- 大字综合得分 -->
+          <div class="text-center md:border-r md:border-slate-100 md:pr-6">
+            <div class="text-xs font-bold text-slate-400 uppercase tracking-wider">综合用户口碑</div>
+            <div class="text-5xl font-black text-slate-900 font-mono mt-2">{{ reviewStats.avg_rating }}</div>
+            <div class="flex justify-center items-center space-x-1 text-amber-400 text-sm mt-2">
+              <i class="fa-solid fa-star"></i>
+              <i class="fa-solid fa-star"></i>
+              <i class="fa-solid fa-star"></i>
+              <i class="fa-solid fa-star"></i>
+              <i class="fa-solid fa-star-half-stroke"></i>
+            </div>
+            <p class="text-xs text-slate-500 mt-2">累计收到 {{ reviewStats.total_count }} 条食客真实体验反馈</p>
+          </div>
+
+          <!-- 细项维度与好评率条形图 -->
+          <div class="space-y-2.5">
+            <div class="flex items-center justify-between text-xs font-medium text-slate-600">
+              <span>口味满意度 ({{ reviewStats.avg_taste }} / 5.0)</span>
+              <span class="font-bold text-brand-600">98% 好评</span>
+            </div>
+            <div class="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+              <div class="bg-brand-500 h-full rounded-full" :style="{ width: (reviewStats.avg_taste / 5 * 100) + '%' }"></div>
+            </div>
+
+            <div class="flex items-center justify-between text-xs font-medium text-slate-600 mt-3">
+              <span>服务与环境 ({{ reviewStats.avg_service }} / 5.0)</span>
+              <span class="font-bold text-emerald-600">96% 满意</span>
+            </div>
+            <div class="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+              <div class="bg-emerald-500 h-full rounded-full" :style="{ width: (reviewStats.avg_service / 5 * 100) + '%' }"></div>
+            </div>
+          </div>
+
+          <!-- 写评价召唤按钮 -->
+          <div class="flex flex-col items-center justify-center md:pl-6">
+            <p class="text-xs text-slate-500 text-center mb-3">品尝过我们的菜品吗？欢迎留下您的真挚评价与建议</p>
+            <button 
+              @click="openReviewModal()" 
+              class="bg-brand-600 hover:bg-brand-700 text-white px-6 py-3 rounded-2xl font-bold text-sm shadow-md transition-all flex items-center space-x-2 active:scale-95">
+              <i class="fa-solid fa-pen-to-square"></i>
+              <span>写下我的用餐评价</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- 评价列表与筛选器 -->
+        <div class="bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-xs">
+          
+          <!-- 筛选控制条 -->
+          <div class="p-4 sm:px-6 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3">
+            <div class="flex items-center space-x-2 overflow-x-auto text-xs">
+              <button 
+                @click="reviewFilter = 'all'" 
+                :class="reviewFilter === 'all' ? 'bg-slate-900 text-white font-bold' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'"
+                class="px-3.5 py-1.5 rounded-full transition-all">
+                全部 ({{ reviewStats.total_count }})
+              </button>
+              <button 
+                @click="reviewFilter = 'positive'" 
+                :class="reviewFilter === 'positive' ? 'bg-amber-500 text-white font-bold' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'"
+                class="px-3.5 py-1.5 rounded-full transition-all">
+                🌟 推荐好评 (4-5星)
+              </button>
+              <button 
+                @click="reviewFilter = 'critical'" 
+                :class="reviewFilter === 'critical' ? 'bg-rose-500 text-white font-bold' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'"
+                class="px-3.5 py-1.5 rounded-full transition-all">
+                💬 待改进反馈 (1-2星)
+              </button>
+              <button 
+                @click="reviewFilter = 'with_reply'" 
+                :class="reviewFilter === 'with_reply' ? 'bg-emerald-600 text-white font-bold' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'"
+                class="px-3.5 py-1.5 rounded-full transition-all">
+                🏪 商家已答复 ({{ reviewStats.replied_count }})
+              </button>
+            </div>
+          </div>
+
+          <!-- 评价卡片流水 -->
+          <div class="divide-y divide-slate-100">
+            <div v-if="reviewsList.length === 0" class="p-12 text-center text-slate-400 text-sm">
+              <i class="fa-solid fa-comment-dots text-4xl mb-3 text-slate-200 block"></i>
+              暂无匹配的评价记录
+            </div>
+
+            <div v-for="rev in reviewsList" :key="rev.id" class="p-6 transition-colors hover:bg-slate-50/50">
+              
+              <!-- 用户头部 -->
+              <div class="flex items-start justify-between">
+                <div class="flex items-center space-x-3">
+                  <img :src="rev.avatar_url" alt="Avatar" class="w-10 h-10 rounded-full object-cover ring-2 ring-slate-100">
+                  <div>
+                    <div class="flex items-center space-x-2">
+                      <span class="font-bold text-slate-900 text-sm">{{ rev.customer_name }}</span>
+                      <span class="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-md font-medium">
+                        {{ rev.dining_type }}消费
+                      </span>
+                    </div>
+                    <div class="flex items-center space-x-2 mt-0.5">
+                      <div class="flex text-amber-400 text-xs">
+                        <i v-for="star in 5" :key="star" :class="star <= rev.rating ? 'fa-solid fa-star' : 'fa-regular fa-star text-slate-200'"></i>
+                      </div>
+                      <span class="text-[11px] text-slate-400">口味 {{ rev.taste_rating }} · 服务 {{ rev.service_rating }}</span>
+                    </div>
+                  </div>
+                </div>
+                <span class="text-xs text-slate-400 font-mono">{{ rev.created_at }}</span>
+              </div>
+
+              <!-- 评价正文 -->
+              <p class="text-sm text-slate-700 leading-relaxed mt-3 whitespace-pre-line pl-13">
+                {{ rev.content }}
+              </p>
+
+              <!-- 推荐菜品与标签 -->
+              <div class="mt-3 pl-13 flex flex-wrap items-center gap-2">
+                <span 
+                  v-for="dishName in rev.rec_dishes" 
+                  :key="dishName" 
+                  class="bg-amber-50 text-amber-800 text-xs px-2.5 py-1 rounded-lg font-medium flex items-center space-x-1">
+                  <i class="fa-solid fa-thumbs-up text-amber-500 text-[10px]"></i>
+                  <span>推荐: {{ dishName }}</span>
+                </span>
+                <span 
+                  v-for="tag in rev.tag_list" 
+                  :key="tag" 
+                  class="bg-slate-100 text-slate-600 text-xs px-2.5 py-0.5 rounded-md">
+                  #{{ tag }}
+                </span>
+              </div>
+
+              <!-- 商家官方回复专区 -->
+              <div v-if="rev.merchant_reply" class="mt-4 ml-13 bg-amber-50/70 border border-amber-200/60 rounded-2xl p-4 text-xs">
+                <div class="flex items-center justify-between text-amber-900 font-bold mb-1">
+                  <span class="flex items-center space-x-1.5">
+                    <i class="fa-solid fa-store text-brand-600"></i>
+                    <span>商家官方诚挚答复</span>
+                  </span>
+                  <span class="text-[11px] font-normal text-amber-700/80">{{ rev.replied_at }}</span>
+                </div>
+                <p class="text-amber-950/90 leading-relaxed">{{ rev.merchant_reply }}</p>
+              </div>
+
+            </div>
+          </div>
+
+        </div>
+
+      </section>
+
+      <!-- 4. 我的订单列表 (TAB: orders) -->
+      <section v-if="customerTab === 'orders'" class="space-y-6">
+        <div class="flex items-center justify-between">
+          <h2 class="text-xl font-bold text-slate-900 flex items-center space-x-2">
+            <i class="fa-solid fa-clock-rotate-left text-brand-600"></i>
+            <span>我的点餐记录与追踪</span>
+          </h2>
+          <span class="text-xs text-slate-500">共 {{ ordersList.length }} 笔订单</span>
+        </div>
+
+        <div v-if="ordersList.length === 0" class="bg-white rounded-3xl border border-slate-200 p-12 text-center">
+          <i class="fa-solid fa-receipt text-5xl text-slate-200 mb-3 block"></i>
+          <p class="text-slate-500 text-sm">您还没有下单过，快去点餐大厅挑选心仪的美食吧</p>
+          <button @click="customerTab = 'ordering'" class="mt-4 px-6 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-bold text-xs rounded-xl transition-all">
+            前往挑选菜品
+          </button>
+        </div>
+
+        <div v-else class="grid grid-cols-1 gap-5">
+          <div 
+            v-for="order in ordersList" 
+            :key="order.id" 
+            class="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-6">
+            
+            <div class="flex-1 space-y-3">
+              <div class="flex flex-wrap items-center gap-2">
+                <span class="font-mono font-bold text-sm text-slate-900">{{ order.id }}</span>
+                <span :class="getStatusBadgeClass(order.status)" class="text-xs font-bold px-2.5 py-0.5 rounded-full border">
+                  {{ getStatusText(order.status) }}
+                </span>
+                <span class="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md">
+                  {{ order.dining_type === 'takeaway' ? '外卖配送' : `堂食 (桌号: ${order.table_number || '未定'})` }}
+                </span>
+                <span class="text-xs text-slate-400 font-mono ml-auto md:ml-0">{{ order.created_at }}</span>
+              </div>
+
+              <!-- 菜品列表清单 -->
+              <div class="bg-slate-50 rounded-xl p-3 text-xs space-y-1.5">
+                <div v-for="item in order.items" :key="item.id" class="flex justify-between text-slate-700">
+                  <span>{{ item.dish_name }} × {{ item.quantity }}</span>
+                  <span class="font-mono font-semibold">¥{{ item.subtotal }}</span>
+                </div>
+                <div v-if="order.packaging_fee > 0" class="flex justify-between text-slate-500 pt-1 border-t border-slate-200/50">
+                  <span>包装费</span>
+                  <span class="font-mono">¥{{ order.packaging_fee }}</span>
+                </div>
+                <div v-if="order.remark" class="text-slate-500 text-[11px] pt-1 border-t border-slate-200/50">
+                  备注：{{ order.remark }}
+                </div>
+              </div>
+
+              <!-- 配送地址或顾客信息 -->
+              <div class="text-xs text-slate-500 flex flex-wrap gap-4">
+                <span>顾客：{{ order.customer_name }} ({{ order.customer_phone }})</span>
+                <span v-if="order.delivery_address">送达地址：{{ order.delivery_address }}</span>
+              </div>
+            </div>
+
+            <!-- 右侧金额与操作 -->
+            <div class="md:text-right flex flex-row md:flex-col justify-between items-end gap-3 border-t md:border-t-0 pt-3 md:pt-0 border-slate-100 shrink-0">
+              <div>
+                <span class="text-xs text-slate-400">实付总额</span>
+                <div class="text-2xl font-black text-brand-600 font-mono">¥{{ order.total_amount }}</div>
+              </div>
+
+              <div class="flex items-center space-x-2">
+                <!-- 取消订单按钮 (仅 pending 状态可用) -->
+                <button 
+                  v-if="order.status === 'pending'" 
+                  @click="cancelOrder(order.id)" 
+                  class="px-3.5 py-1.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-100 text-xs font-semibold">
+                  取消订单
+                </button>
+
+                <!-- 评价订单按钮 -->
+                <button 
+                  v-if="order.status === 'completed'" 
+                  @click="openReviewModal(order)" 
+                  class="px-4 py-1.5 rounded-xl bg-brand-50 hover:bg-brand-100 text-brand-600 border border-brand-200 text-xs font-bold transition-all">
+                  <i class="fa-solid fa-star text-amber-500 mr-1"></i>评价此单
+                </button>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+      </section>
+
+    </main>
+
+    <!-- ==================== 商家管理后台工作台 ==================== -->
+    <main v-if="currentMode === 'admin'" class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      
+      <!-- 统计指标仪表盘 -->
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
+          <div class="text-xs text-slate-400 font-medium">今日营业额</div>
+          <div class="text-2xl font-black text-brand-600 font-mono mt-1">¥{{ adminStats.today_revenue }}</div>
+          <div class="text-xs text-slate-500 mt-1">今日完成订单 {{ adminStats.today_orders }} 笔</div>
+        </div>
+        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
+          <div class="text-xs text-slate-400 font-medium">待接单/处理订单</div>
+          <div class="text-2xl font-black text-amber-500 font-mono mt-1">{{ adminStats.pending_orders }}</div>
+          <div class="text-xs text-slate-500 mt-1">请及时接单避免顾客等待</div>
+        </div>
+        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
+          <div class="text-xs text-slate-400 font-medium">店铺口碑评分</div>
+          <div class="text-2xl font-black text-slate-900 font-mono mt-1">{{ adminStats.avg_rating }} ★</div>
+          <div class="text-xs text-slate-500 mt-1">待答复评价 {{ adminStats.unreplied_reviews }} 条</div>
+        </div>
+        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
+          <div class="text-xs text-slate-400 font-medium">营业状态开关</div>
+          <div class="flex items-center space-x-2 mt-2">
+            <button 
+              @click="toggleOpenStatus" 
+              :class="merchant.is_open === 1 ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-700'"
+              class="px-4 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center space-x-1.5">
+              <i :class="merchant.is_open === 1 ? 'fa-solid fa-door-open' : 'fa-solid fa-door-closed'"></i>
+              <span>{{ merchant.is_open === 1 ? '营业中 (点击切换休息)' : '已打烊 (点击开门营业)' }}</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 后台二级导航栏 -->
+      <div class="flex space-x-2 border-b border-slate-200 mb-6 pb-2 overflow-x-auto text-sm font-semibold">
+        <button 
+          @click="adminTab = 'admin_orders'" 
+          :class="adminTab === 'admin_orders' ? 'text-brand-600 border-b-2 border-brand-600 font-bold' : 'text-slate-500 hover:text-slate-800'"
+          class="px-4 py-2 flex items-center space-x-2">
+          <i class="fa-solid fa-kitchen-set"></i>
+          <span>订单实时处理流转</span>
+          <span v-if="adminStats.pending_orders > 0" class="bg-rose-500 text-white text-[10px] px-1.5 py-0.2 rounded-full font-bold">
+            {{ adminStats.pending_orders }}
+          </span>
+        </button>
+        <button 
+          @click="adminTab = 'admin_dishes'" 
+          :class="adminTab === 'admin_dishes' ? 'text-brand-600 border-b-2 border-brand-600 font-bold' : 'text-slate-500 hover:text-slate-800'"
+          class="px-4 py-2 flex items-center space-x-2">
+          <i class="fa-solid fa-burger"></i>
+          <span>菜品上下架与管理</span>
+        </button>
+        <button 
+          @click="adminTab = 'admin_reviews'" 
+          :class="adminTab === 'admin_reviews' ? 'text-brand-600 border-b-2 border-brand-600 font-bold' : 'text-slate-500 hover:text-slate-800'"
+          class="px-4 py-2 flex items-center space-x-2">
+          <i class="fa-solid fa-comments"></i>
+          <span>食客评价互动中心</span>
+          <span v-if="adminStats.unreplied_reviews > 0" class="bg-amber-500 text-white text-[10px] px-1.5 py-0.2 rounded-full font-bold">
+            {{ adminStats.unreplied_reviews }}待回
+          </span>
+        </button>
+        <button 
+          @click="adminTab = 'admin_settings'" 
+          :class="adminTab === 'admin_settings' ? 'text-brand-600 border-b-2 border-brand-600 font-bold' : 'text-slate-500 hover:text-slate-800'"
+          class="px-4 py-2 flex items-center space-x-2">
+          <i class="fa-solid fa-sliders"></i>
+          <span>商家简介与信息维护</span>
+        </button>
+      </div>
+
+      <!-- 1. 后台订单管理 -->
+      <div v-if="adminTab === 'admin_orders'" class="space-y-4">
+        <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
+          <div class="p-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center text-xs font-bold text-slate-700">
+            <span>实时订单列表</span>
+            <span>流转操作：待接单 ➔ 后厨制作 ➔ 待取餐/配送 ➔ 完成</span>
+          </div>
+
+          <div class="divide-y divide-slate-100">
+            <div v-for="order in ordersList" :key="order.id" class="p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+              <div class="space-y-2">
+                <div class="flex items-center space-x-2">
+                  <span class="font-mono font-bold text-slate-900 text-sm">{{ order.id }}</span>
+                  <span :class="getStatusBadgeClass(order.status)" class="text-xs font-bold px-2.5 py-0.5 rounded-full border">
+                    {{ getStatusText(order.status) }}
+                  </span>
+                  <span class="text-xs font-semibold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md">
+                    {{ order.dining_type === 'takeaway' ? '🛵 外卖单' : `🍽️ 堂食 ${order.table_number || ''}` }}
+                  </span>
+                  <span class="text-xs text-slate-400 font-mono">{{ order.created_at }}</span>
+                </div>
+
+                <div class="text-xs text-slate-700">
+                  <span class="font-bold">顾客：</span>{{ order.customer_name }} ({{ order.customer_phone }})
+                  <span v-if="order.delivery_address" class="ml-2 font-bold">送达：{{ order.delivery_address }}</span>
+                </div>
+
+                <div class="flex flex-wrap gap-2 text-xs">
+                  <span v-for="item in order.items" :key="item.id" class="bg-slate-100 px-2 py-1 rounded-md text-slate-800">
+                    {{ item.dish_name }} × {{ item.quantity }}
+                  </span>
+                </div>
+
+                <div v-if="order.remark" class="text-xs text-amber-700 bg-amber-50 px-2.5 py-1 rounded-md inline-block">
+                  <i class="fa-solid fa-note-sticky mr-1"></i>备注：{{ order.remark }}
+                </div>
+              </div>
+
+              <!-- 流转按钮群 -->
+              <div class="flex items-center space-x-2 shrink-0">
+                <div class="text-right mr-3">
+                  <div class="text-xs text-slate-400">实付总额</div>
+                  <div class="text-lg font-bold text-brand-600 font-mono">¥{{ order.total_amount }}</div>
+                </div>
+
+                <button 
+                  v-if="order.status === 'pending'" 
+                  @click="setOrderStatus(order.id, 'preparing')" 
+                  class="bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-2 rounded-xl text-xs font-bold transition-all shadow-xs">
+                  <i class="fa-solid fa-check mr-1"></i>接单开始制作
+                </button>
+
+                <button 
+                  v-if="order.status === 'preparing'" 
+                  @click="setOrderStatus(order.id, 'delivering')" 
+                  class="bg-purple-600 hover:bg-purple-700 text-white px-3.5 py-2 rounded-xl text-xs font-bold transition-all shadow-xs">
+                  <i class="fa-solid fa-bell-concierge mr-1"></i>制作完成出餐
+                </button>
+
+                <button 
+                  v-if="order.status === 'delivering'" 
+                  @click="setOrderStatus(order.id, 'completed')" 
+                  class="bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-2 rounded-xl text-xs font-bold transition-all shadow-xs">
+                  <i class="fa-solid fa-circle-check mr-1"></i>确认已完成
+                </button>
+
+                <button 
+                  v-if="['pending', 'preparing'].includes(order.status)" 
+                  @click="setOrderStatus(order.id, 'cancelled')" 
+                  class="bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-600 px-3 py-2 rounded-xl text-xs font-semibold transition-all">
+                  取消
+                </button>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. 后台菜品管理 -->
+      <div v-if="adminTab === 'admin_dishes'" class="space-y-4">
+        <div class="flex justify-between items-center">
+          <h3 class="text-base font-bold text-slate-900">菜品列表与库存维护</h3>
+          <button 
+            @click="openCreateDishModal" 
+            class="bg-brand-600 hover:bg-brand-700 text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center space-x-1.5 shadow-xs">
+            <i class="fa-solid fa-plus"></i>
+            <span>新增菜品</span>
+          </button>
+        </div>
+
+        <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
+          <table class="w-full text-left text-xs text-slate-700">
+            <thead class="bg-slate-50 border-b border-slate-200 text-slate-400 font-bold uppercase">
+              <tr>
+                <th class="p-3.5">菜品</th>
+                <th class="p-3.5">分类</th>
+                <th class="p-3.5">售价</th>
+                <th class="p-3.5">月销量</th>
+                <th class="p-3.5">评分</th>
+                <th class="p-3.5">当前在售状态</th>
+                <th class="p-3.5 text-right">操作</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+              <tr v-for="dish in dishes" :key="dish.id" class="hover:bg-slate-50/50">
+                <td class="p-3.5 flex items-center space-x-3">
+                  <img :src="dish.image_url" alt="" class="w-10 h-10 rounded-lg object-cover">
+                  <div>
+                    <div class="font-bold text-slate-900">{{ dish.name }}</div>
+                    <div class="text-[11px] text-slate-400 truncate max-w-xs">{{ dish.description }}</div>
+                  </div>
+                </td>
+                <td class="p-3.5">{{ dish.category_name }}</td>
+                <td class="p-3.5 font-bold font-mono text-brand-600">¥{{ dish.price }}</td>
+                <td class="p-3.5 font-mono">{{ dish.monthly_sales }}</td>
+                <td class="p-3.5 text-amber-500 font-bold font-mono">{{ dish.rating }} ★</td>
+                <td class="p-3.5">
+                  <button 
+                    @click="toggleDishStatus(dish)" 
+                    :class="dish.is_available === 1 ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : 'bg-rose-100 text-rose-800 border-rose-300'"
+                    class="px-2.5 py-1 rounded-full text-[11px] font-bold border transition-colors">
+                    {{ dish.is_available === 1 ? '在售中 (点击下架)' : '已下架 (点击上架)' }}
+                  </button>
+                </td>
+                <td class="p-3.5 text-right space-x-2">
+                  <button @click="openEditDishModal(dish)" class="text-blue-600 hover:text-blue-800 font-medium">编辑</button>
+                  <button @click="deleteDish(dish.id)" class="text-rose-600 hover:text-rose-800 font-medium">删除</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 3. 后台评价中心 -->
+      <div v-if="adminTab === 'admin_reviews'" class="space-y-4">
+        <div class="bg-white rounded-2xl border border-slate-200 divide-y divide-slate-100 shadow-xs">
+          <div v-for="rev in reviewsList" :key="rev.id" class="p-5 flex flex-col md:flex-row justify-between gap-4">
+            <div class="space-y-1.5 flex-1">
+              <div class="flex items-center space-x-2">
+                <span class="font-bold text-slate-900 text-sm">{{ rev.customer_name }}</span>
+                <span class="text-amber-500 font-bold text-xs">{{ rev.rating }} ★</span>
+                <span class="text-xs text-slate-400 font-mono">{{ rev.created_at }}</span>
+              </div>
+              <p class="text-xs text-slate-700 leading-relaxed">{{ rev.content }}</p>
+              
+              <!-- 已有商家回复 -->
+              <div v-if="rev.merchant_reply" class="bg-amber-50 border border-amber-200/50 rounded-xl p-3 text-xs text-amber-900 mt-2">
+                <div class="font-bold mb-0.5">已回复内容 ({{ rev.replied_at }}):</div>
+                <div>{{ rev.merchant_reply }}</div>
+              </div>
+            </div>
+
+            <div class="shrink-0 flex items-center space-x-2">
+              <button 
+                @click="openReplyModal(rev)" 
+                class="bg-brand-50 hover:bg-brand-100 text-brand-600 border border-brand-200 px-3.5 py-2 rounded-xl text-xs font-bold transition-all">
+                <i class="fa-solid fa-reply mr-1"></i>
+                <span>{{ rev.merchant_reply ? '修改回复' : '回复顾客' }}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 4. 后台商家设置 -->
+      <div v-if="adminTab === 'admin_settings'" class="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-xs">
+        <h3 class="text-lg font-bold text-slate-900 mb-6 flex items-center space-x-2">
+          <i class="fa-solid fa-gear text-brand-600"></i>
+          <span>商家主页资料维护</span>
+        </h3>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+          <div>
+            <label class="block text-slate-500 font-semibold mb-1">店铺名称：</label>
+            <input v-model="adminMerchantForm.name" type="text" class="w-full p-2.5 bg-slate-50 rounded-xl border border-slate-200">
+          </div>
+          <div>
+            <label class="block text-slate-500 font-semibold mb-1">Slogan 宣传标语：</label>
+            <input v-model="adminMerchantForm.slogan" type="text" class="w-full p-2.5 bg-slate-50 rounded-xl border border-slate-200">
+          </div>
+          <div>
+            <label class="block text-slate-500 font-semibold mb-1">订餐电话：</label>
+            <input v-model="adminMerchantForm.phone" type="text" class="w-full p-2.5 bg-slate-50 rounded-xl border border-slate-200">
+          </div>
+          <div>
+            <label class="block text-slate-500 font-semibold mb-1">营业时间说明：</label>
+            <input v-model="adminMerchantForm.opening_hours" type="text" class="w-full p-2.5 bg-slate-50 rounded-xl border border-slate-200">
+          </div>
+          <div class="md:col-span-2">
+            <label class="block text-slate-500 font-semibold mb-1">详细地址：</label>
+            <input v-model="adminMerchantForm.address" type="text" class="w-full p-2.5 bg-slate-50 rounded-xl border border-slate-200">
+          </div>
+          <div class="md:col-span-2">
+            <label class="block text-slate-500 font-semibold mb-1">滚动公告广播：</label>
+            <input v-model="adminMerchantForm.notice" type="text" class="w-full p-2.5 bg-slate-50 rounded-xl border border-slate-200">
+          </div>
+          <div class="md:col-span-2">
+            <label class="block text-slate-500 font-semibold mb-1">品牌故事叙述：</label>
+            <textarea v-model="adminMerchantForm.story" rows="4" class="w-full p-2.5 bg-slate-50 rounded-xl border border-slate-200"></textarea>
+          </div>
+        </div>
+
+        <div class="mt-6 flex justify-end">
+          <button @click="saveMerchantSettings" class="bg-brand-600 hover:bg-brand-700 text-white px-6 py-2.5 rounded-xl font-bold text-xs shadow-xs transition-all">
+            保存店铺信息
+          </button>
+        </div>
+      </div>
+
+    </main>
+
+    <!-- ==================== 弹窗组件群 ==================== -->
+    
+    <!-- 1. 菜品详情放大弹窗 -->
+    <div v-if="dishModalOpen && currentDishDetail" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+      <div class="bg-white rounded-3xl overflow-hidden max-w-lg w-full shadow-2xl">
+        <div class="relative h-64">
+          <img :src="currentDishDetail.image_url" alt="" class="w-full h-full object-cover">
+          <button @click="dishModalOpen = false" class="absolute top-3 right-3 w-8 h-8 rounded-full bg-black/50 text-white flex items-center justify-center hover:bg-black/70">
+            <i class="fa-solid fa-xmark text-sm"></i>
+          </button>
+        </div>
+        <div class="p-6">
+          <div class="flex justify-between items-start">
+            <h3 class="text-xl font-extrabold text-slate-900">{{ currentDishDetail.name }}</h3>
+            <span class="text-xl font-black text-brand-600 font-mono">¥{{ currentDishDetail.price }}</span>
+          </div>
+          <p class="text-xs text-slate-500 mt-2 leading-relaxed">{{ currentDishDetail.description }}</p>
+          <div class="flex flex-wrap gap-1.5 mt-4">
+            <span v-for="t in currentDishDetail.tag_list" :key="t" class="bg-brand-50 text-brand-700 text-[11px] px-2.5 py-0.5 rounded-md font-semibold">
+              # {{ t }}
+            </span>
+          </div>
+          <button 
+            @click="addToCart(currentDishDetail); dishModalOpen = false" 
+            class="w-full mt-6 py-3 bg-brand-600 hover:bg-brand-700 text-white font-bold text-sm rounded-xl shadow-xs transition-all">
+            加入购物车
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2. 发表真实评价弹窗 -->
+    <div v-if="reviewModalOpen" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+      <div class="bg-white rounded-3xl overflow-hidden max-w-lg w-full shadow-2xl p-6 sm:p-8 space-y-4">
+        <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+          <h3 class="text-base font-bold text-slate-900 flex items-center space-x-2">
+            <i class="fa-solid fa-pen-nib text-brand-600"></i>
+            <span>发表用餐体验与评价</span>
+          </h3>
+          <button @click="reviewModalOpen = false" class="text-slate-400 hover:text-slate-600">
+            <i class="fa-solid fa-xmark text-lg"></i>
+          </button>
+        </div>
+
+        <div class="space-y-3 text-xs">
+          <!-- 总体星级评分 -->
+          <div>
+            <label class="block text-slate-500 mb-1 font-semibold">总体评价打分：</label>
+            <div class="flex items-center space-x-2 text-xl text-amber-400 cursor-pointer">
+              <i 
+                v-for="s in 5" 
+                :key="s" 
+                @click="newReview.rating = s"
+                :class="s <= newReview.rating ? 'fa-solid fa-star' : 'fa-regular fa-star text-slate-200'"
+                class="hover:scale-110 transition-transform"></i>
+              <span class="text-xs text-slate-500 font-bold ml-2 font-mono">{{ newReview.rating }} 星</span>
+            </div>
+          </div>
+
+          <!-- 口味与服务细评 -->
+          <div class="grid grid-cols-2 gap-4 bg-slate-50 p-3 rounded-xl">
+            <div>
+              <span class="block text-slate-500 mb-1">菜品口味评分：</span>
+              <div class="flex text-amber-400 text-sm cursor-pointer">
+                <i v-for="s in 5" :key="s" @click="newReview.taste_rating = s" :class="s <= newReview.taste_rating ? 'fa-solid fa-star' : 'fa-regular fa-star text-slate-200'"></i>
+              </div>
+            </div>
+            <div>
+              <span class="block text-slate-500 mb-1">环境与服务评分：</span>
+              <div class="flex text-amber-400 text-sm cursor-pointer">
+                <i v-for="s in 5" :key="s" @click="newReview.service_rating = s" :class="s <= newReview.service_rating ? 'fa-solid fa-star' : 'fa-regular fa-star text-slate-200'"></i>
+              </div>
+            </div>
+          </div>
+
+          <!-- 评价昵称与就餐类型 -->
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-slate-500 mb-1">您的昵称：</label>
+              <input v-model="newReview.customer_name" type="text" placeholder="食客昵称" class="w-full p-2 bg-slate-50 rounded-lg border border-slate-200 text-xs">
+            </div>
+            <div>
+              <label class="block text-slate-500 mb-1">用餐方式：</label>
+              <select v-model="newReview.dining_type" class="w-full p-2 bg-slate-50 rounded-lg border border-slate-200 text-xs">
+                <option value="堂食">堂食体验</option>
+                <option value="外卖">外卖送达</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- 快捷印象标签 -->
+          <div>
+            <label class="block text-slate-500 mb-1.5 font-semibold">快速选择印象标签：</label>
+            <div class="flex flex-wrap gap-1.5">
+              <button 
+                v-for="t in availableReviewTags" 
+                :key="t" 
+                @click="toggleReviewTag(t)" 
+                :class="newReview.tags.includes(t) ? 'bg-brand-600 text-white font-bold' : 'bg-slate-100 text-slate-600'"
+                class="px-2.5 py-1 rounded-md text-[11px] transition-colors">
+                {{ t }}
+              </button>
+            </div>
+          </div>
+
+          <!-- 推荐菜品 -->
+          <div>
+            <label class="block text-slate-500 mb-1.5 font-semibold">推荐这道菜 (可选)：</label>
+            <div class="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
+              <button 
+                v-for="d in dishes.slice(0, 8)" 
+                :key="d.id" 
+                @click="toggleDishRecommendation(d.name)" 
+                :class="newReview.recommended_dishes.includes(d.name) ? 'bg-amber-500 text-white font-bold' : 'bg-slate-100 text-slate-600'"
+                class="px-2.5 py-1 rounded-md text-[11px] transition-colors">
+                👍 {{ d.name }}
+              </button>
+            </div>
+          </div>
+
+          <!-- 评价内容输入框 -->
+          <div>
+            <label class="block text-slate-500 mb-1 font-semibold">详细评价心得：</label>
+            <textarea 
+              v-model="newReview.content" 
+              rows="3" 
+              placeholder="分享您对菜品口感、分量、服务或包装的真实感受吧..." 
+              class="w-full p-2.5 bg-slate-50 rounded-xl border border-slate-200 text-xs focus:ring-1 focus:ring-brand-500"></textarea>
+          </div>
+        </div>
+
+        <div class="pt-2 flex justify-end space-x-2">
+          <button @click="reviewModalOpen = false" class="px-4 py-2 bg-slate-100 text-slate-600 rounded-xl text-xs font-semibold">取消</button>
+          <button @click="submitReview" class="px-5 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-bold shadow-xs">提交评价</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 3. 商家回复评价弹窗 -->
+    <div v-if="replyModalOpen && currentReviewToReply" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+      <div class="bg-white rounded-3xl overflow-hidden max-w-md w-full shadow-2xl p-6 space-y-4">
+        <h3 class="text-base font-bold text-slate-900">回复食客评价</h3>
+        <div class="bg-slate-50 p-3 rounded-xl text-xs text-slate-600">
+          <div class="font-bold text-slate-900 mb-1">{{ currentReviewToReply.customer_name }} 的评价：</div>
+          <p>{{ currentReviewToReply.content }}</p>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 mb-1">商家答复内容：</label>
+          <textarea 
+            v-model="replyText" 
+            rows="4" 
+            placeholder="用真诚热情的态度回复食客的建议与鼓励..." 
+            class="w-full p-2.5 bg-slate-50 rounded-xl border border-slate-200 text-xs"></textarea>
+        </div>
+        <div class="flex justify-end space-x-2">
+          <button @click="replyModalOpen = false" class="px-4 py-2 bg-slate-100 text-slate-600 rounded-xl text-xs font-semibold">取消</button>
+          <button @click="submitMerchantReply" class="px-5 py-2 bg-brand-600 text-white rounded-xl text-xs font-bold">确定发表回复</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 4. 商家新增/编辑菜品弹窗 -->
+    <div v-if="adminDishModalOpen" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+      <div class="bg-white rounded-3xl overflow-hidden max-w-lg w-full shadow-2xl p-6 sm:p-8 space-y-4">
+        <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+          <h3 class="text-base font-bold text-slate-900">{{ isEditingDish ? '编辑菜品信息' : '录入新菜品' }}</h3>
+          <button @click="adminDishModalOpen = false" class="text-slate-400 hover:text-slate-600">
+            <i class="fa-solid fa-xmark text-lg"></i>
+          </button>
+        </div>
+
+        <div class="space-y-3 text-xs">
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-slate-500 mb-1 font-semibold">菜品名称：</label>
+              <input v-model="dishForm.name" type="text" class="w-full p-2 bg-slate-50 rounded-lg border border-slate-200 text-xs">
+            </div>
+            <div>
+              <label class="block text-slate-500 mb-1 font-semibold">所属分类：</label>
+              <select v-model="dishForm.category_id" class="w-full p-2 bg-slate-50 rounded-lg border border-slate-200 text-xs">
+                <option v-for="c in categories" :key="c.id" :value="c.id">{{ c.name }}</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-slate-500 mb-1 font-semibold">现售价 (元)：</label>
+              <input v-model.number="dishForm.price" type="number" step="0.5" class="w-full p-2 bg-slate-50 rounded-lg border border-slate-200 text-xs">
+            </div>
+            <div>
+              <label class="block text-slate-500 mb-1 font-semibold">划线原价 (元，选填)：</label>
+              <input v-model.number="dishForm.original_price" type="number" step="0.5" class="w-full p-2 bg-slate-50 rounded-lg border border-slate-200 text-xs">
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-slate-500 mb-1 font-semibold">菜品图片链接 (URL)：</label>
+            <input v-model="dishForm.image_url" type="text" class="w-full p-2 bg-slate-50 rounded-lg border border-slate-200 text-xs">
+          </div>
+
+          <div>
+            <label class="block text-slate-500 mb-1 font-semibold">特色标签 (逗号分隔)：</label>
+            <input v-model="dishForm.tags" type="text" placeholder="例如: 招牌,微辣,热销" class="w-full p-2 bg-slate-50 rounded-lg border border-slate-200 text-xs">
+          </div>
+
+          <div>
+            <label class="block text-slate-500 mb-1 font-semibold">菜品描述及原料火候：</label>
+            <textarea v-model="dishForm.description" rows="3" class="w-full p-2.5 bg-slate-50 rounded-xl border border-slate-200 text-xs"></textarea>
+          </div>
+        </div>
+
+        <div class="pt-2 flex justify-end space-x-2">
+          <button @click="adminDishModalOpen = false" class="px-4 py-2 bg-slate-100 text-slate-600 rounded-xl text-xs font-semibold">取消</button>
+          <button @click="saveDish" class="px-5 py-2 bg-brand-600 text-white rounded-xl text-xs font-bold">保存菜品</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 移动端购物车侧边抽屉 -->
+    <div v-if="isCartOpen" class="xl:hidden fixed inset-0 z-50 flex justify-end bg-black/50 backdrop-blur-xs">
+      <div class="w-full max-w-sm bg-white h-full flex flex-col p-5 shadow-2xl">
+        <div class="flex justify-between items-center pb-3 border-b border-slate-100">
+          <h3 class="font-bold text-slate-900 text-base">已选餐品 ({{ cartTotalQuantity }})</h3>
+          <button @click="isCartOpen = false" class="text-slate-400 hover:text-slate-600">
+            <i class="fa-solid fa-xmark text-lg"></i>
+          </button>
+        </div>
+
+        <div class="flex-1 overflow-y-auto divide-y divide-slate-100 py-3">
+          <div v-if="cart.length === 0" class="py-12 text-center text-slate-400 text-xs">
+            购物车为空
+          </div>
+          <div v-for="item in cart" :key="item.dish_id" class="py-2.5 flex items-center justify-between">
+            <div>
+              <div class="font-bold text-slate-800 text-xs">{{ item.name }}</div>
+              <div class="text-[11px] text-brand-600 font-mono font-bold">¥{{ item.price }}</div>
+            </div>
+            <div class="flex items-center space-x-2">
+              <button @click="decreaseCartItem(item)" class="w-6 h-6 rounded bg-slate-100 text-slate-700 flex items-center justify-center text-xs">
+                <i class="fa-solid fa-minus text-[10px]"></i>
+              </button>
+              <span class="text-xs font-bold font-mono">{{ item.quantity }}</span>
+              <button @click="increaseCartItem(item)" class="w-6 h-6 rounded bg-brand-50 text-brand-600 flex items-center justify-center text-xs">
+                <i class="fa-solid fa-plus text-[10px]"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="pt-3 border-t border-slate-100">
+          <div class="flex justify-between text-base font-bold text-slate-900 mb-3">
+            <span>合计金额</span>
+            <span class="text-brand-600 font-mono">¥{{ cartGrandTotal }}</span>
+          </div>
+          <button 
+            @click="submitOrder" 
+            :disabled="cart.length === 0"
+            class="w-full py-3 bg-brand-600 text-white rounded-xl font-bold text-sm shadow-xs">
+            提交订单
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 底部状态与版权信息 -->
+    <footer class="bg-white border-t border-slate-200 mt-auto py-6">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center text-xs text-slate-400 space-y-1">
+        <p>© 2026 拾味小馆 智慧餐饮系统 · 匠心出品</p>
+        <p>集成订餐下单、商家主页简介与食客评价回复系统 · 基于 FastAPI & SQLite & Vue 构建</p>
+      </div>
+    </footer>
+
+  </div>
+
+  <!-- 引入主应用逻辑 -->
+  <script src="/static/js/app.js"></script>
+</body>
+</html>
